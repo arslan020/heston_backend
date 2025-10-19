@@ -33,10 +33,26 @@ await connectDB(process.env.MONGO_URI);
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || 'http://localhost:3000',
-  credentials: true,
-}));
+
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://heston-app-henh.vercel.app",
+  "https://heston-backend.onrender.com"
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  })
+);
+
 
 // logs
 app.use(morgan('dev'));
