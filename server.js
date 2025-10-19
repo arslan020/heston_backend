@@ -37,6 +37,8 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 const allowedOrigins = [
   'http://localhost:3000',
   'https://heston-app-henh.vercel.app',
+    "https://ha.hestonautomotive.com"
+
 ];
 
 app.use(cors({
