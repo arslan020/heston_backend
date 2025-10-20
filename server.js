@@ -62,7 +62,7 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: 'https://appraise.hestonautomotive.com',  // exact frontend domain
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -94,12 +94,12 @@ app.use(
     cookie: {
       httpOnly: true,
       // iPhone/Safari needs this when FE & BE are on different origins:
-      sameSite: isProd ? 'none' : 'lax',
+      sameSite: 'none',
       // Must be true in production for SameSite=None cookies:
-      secure: isProd,
+      secure: true,
       // OPTIONAL: only set this if your BACKEND is also under *.hestonautomotive.com
       // domain: '.hestonautomotive.com',
-      // maxAge: 1000 * 60 * 60 * 24, // optional: 1 day
+      maxAge: 24 * 60 * 60 * 1000, // optional: 1 day
     },
   })
 );
@@ -109,6 +109,15 @@ app.use('/api/auth', authRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/dvla', dvlaRoutes);
 app.use(appraisalsRouter); // ⬅️ VERY IMPORTANT
+
+// Simple root route (added as per summary)
+app.get('/', (req, res) => res.status(200).send('OK'));
+
+// Optional test route for cookie testing
+app.get('/test-cookie', (req, res) => {
+  res.cookie('x_test', '1', { httpOnly: true, secure: true, sameSite: 'none' });
+  res.json({ ok: true });
+});
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
