@@ -60,9 +60,18 @@ const allowedOrigins = [
   process.env.CLIENT_ORIGIN,
 ].filter(Boolean);
 
+// Updated CORS: Use dynamic origin check for better Safari compatibility
 app.use(
   cors({
-    origin: 'https://appraise.hestonautomotive.com', // exact frontend domain
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g., mobile apps or Postman)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -77,6 +86,7 @@ app.use((req, res, next) => {
 });
 
 // ------------- Session store & cookie ------------------------
+// Updated for Safari compatibility: secure only in prod, domain set for subdomains
 app.use(
   session({
     name: 'sid', // ⬅️ explicit cookie name (was default "connect.sid")
@@ -95,10 +105,10 @@ app.use(
       httpOnly: true,
       // iPhone/Safari needs this when FE & BE are on different origins:
       sameSite: 'none',
-      // Must be true in production for SameSite=None cookies:
-      secure: true,
-      // OPTIONAL: only set this if your BACKEND is also under *.hestonautomotive.com
-      // domain: '.hestonautomotive.com',
+      // Secure only in production (Safari blocks insecure cookies)
+      secure: isProd, // false in dev, true in prod
+      // Set domain if using subdomains (e.g., .hestonautomotive.com)
+      domain: isProd ? '.hestonautomotive.com' : undefined, // Only in prod
       maxAge: 24 * 60 * 60 * 1000, // optional: 1 day
     },
   })
@@ -115,7 +125,7 @@ app.get('/', (req, res) => res.status(200).send('OK'));
 
 // Optional test route for cookie testing
 app.get('/test-cookie', (req, res) => {
-  res.cookie('x_test', '1', { httpOnly: true, secure: true, sameSite: 'none' });
+  res.cookie('x_test', '1', { httpOnly: true, secure: isProd, sameSite: 'none' });
   res.json({ ok: true });
 });
 
