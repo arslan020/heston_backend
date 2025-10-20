@@ -1,3 +1,4 @@
+// server.js
 import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
@@ -91,13 +92,15 @@ app.use(
       // ttl: 60 * 60 * 24, // optional: 1 day
     }),
     cookie: {
-  httpOnly: true,
-  secure: true,      // only works over HTTPS (Render production)
-  sameSite: 'lax',   // ✅ best when using Vercel proxy (same-origin)
-  // domain: '.hestonautomotive.com', // ❌ don't use for onrender.com backend
-  maxAge: 24 * 60 * 60 * 1000        // 1 day
-}
-
+      httpOnly: true,
+      // iPhone/Safari needs this when FE & BE are on different origins:
+      sameSite: 'none',
+      // Must be true in production for SameSite=None cookies:
+      secure: true,
+      // OPTIONAL: only set this if your BACKEND is also under *.hestonautomotive.com
+      // domain: '.hestonautomotive.com',
+      maxAge: 24 * 60 * 60 * 1000, // optional: 1 day
+    },
   })
 );
 
