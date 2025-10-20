@@ -53,14 +53,11 @@ app.use(
   })
 );
 
-// Preflight for all routes
-app.options(
-  '*',
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-  })
-);
+// Ensure credentials header is always present on API responses
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
 
 // ------------- Logs -----------------
 app.use(morgan('dev'));
@@ -75,6 +72,7 @@ app.use(
     secret: process.env.SESSION_SECRET || 'devsecret',
     resave: false,
     saveUninitialized: false,
+    proxy: true,
     cookie: {
       httpOnly: true,
       sameSite: isProd ? 'none' : 'lax', // cross-site cookies for Vercel ↔ Render, incl. iOS/Safari
