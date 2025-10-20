@@ -1,4 +1,3 @@
-// server.js
 import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
