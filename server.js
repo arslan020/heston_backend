@@ -17,6 +17,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// ---------------- DB ----------------
 await connectDB(process.env.MONGO_URI);
 
 // (optional) seed admin
@@ -29,55 +30,65 @@ await connectDB(process.env.MONGO_URI);
   }
 })();
 
-// --- parsers & CORS (NOTE: before routes)
+// ------------- Parsers --------------
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// ✅ CORS config (array-based + explicit OPTIONS)
+// ------------- CORS -----------------
+// Keep localhost (dev), Vercel app, and your custom subdomain.
+// You can also supply CLIENT_ORIGIN via Render env; falsy values are filtered.
 const allowedOrigins = [
   'http://localhost:3000',
   'https://heston-app-henh.vercel.app',
-    "https://appraise.hestonautomotive.com"
+  'https://appraise.hestonautomotive.com',
+  process.env.CLIENT_ORIGIN,
+].filter(Boolean);
 
-];
-
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
-}));
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 
 // Preflight for all routes
-app.options('*', cors({
-  origin: allowedOrigins,
-  credentials: true,
-}));
+app.options(
+  '*',
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
 
-// logs
+// ------------- Logs -----------------
 app.use(morgan('dev'));
 
-// sessions
-app.set('trust proxy', 1); // Render/Proxy ke liye
+// -------- Sessions / Cookies --------
+// Required for secure cookies behind Render/NGINX
+app.set('trust proxy', 1);
 const isProd = process.env.NODE_ENV === 'production';
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'devsecret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax',
-    secure: isProd,
-  },
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGO_URI,
-    dbName: 'heston_auth',
-    collectionName: 'sessions'
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'devsecret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: isProd ? 'none' : 'lax', // cross-site cookies for Vercel ↔ Render, incl. iOS/Safari
+      secure: isProd,                    // HTTPS only in production
+    },
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URI,
+      dbName: 'heston_auth',
+      collectionName: 'sessions',
+    }),
   })
-}));
+);
 
-// --- mount routes (make sure this line exists)
+// -------------- Routes --------------
 app.use('/api/auth', authRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/dvla', dvlaRoutes);
@@ -85,10 +96,13 @@ app.use(appraisalsRouter); // ⬅️ VERY IMPORTANT
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// 404 debug helper
+// ------------- 404 Helper -----------
 app.use((req, res) => {
   console.warn('404', req.method, req.originalUrl);
   res.status(404).json({ error: 'Not found' });
 });
 
-app.listen(PORT, () => console.log(`🚀 Backend running on http://localhost:${PORT}`));
+// -------------- Server --------------
+app.listen(PORT, () =>
+  console.log(`🚀 Backend running on http://localhost:${PORT}`)
+);
