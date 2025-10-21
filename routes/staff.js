@@ -23,40 +23,81 @@ router.get('/', ensureAuth, ensureAdmin, async (_req, res) => {
  */
 router.post('/', ensureAuth, ensureAdmin, async (req, res) => {
   const { firstName, lastName, username, email, password } = req.body;
-  if (!firstName || !lastName || !username || !email || !password) {
-    return res.status(400).json({ error: 'All fields required' });
+  if (!firstName || !username || !email || !password) {
+    return res.status(400).json({ error: 'First name, username, email, and password are required' });
   }
+
   const passwordHash = await bcrypt.hash(password, 10);
-  const staff = await Staff.create({ firstName, lastName, username, email, passwordHash });
+  const staff = await Staff.create({
+    firstName: String(firstName).trim(),
+    lastName:  (typeof lastName === 'string' && lastName.trim() !== '') ? String(lastName).trim() : undefined,
+    username:  String(username).trim(),
+    email:     String(email).trim(),
+    passwordHash
+  });
+
   res.status(201).json({
     _id: staff._id,
-    firstName,
-    lastName,
-    username,
-    email,
+    firstName: staff.firstName,
+    lastName:  staff.lastName,
+    username:  staff.username,
+    email:     staff.email,
     createdAt: staff.createdAt,
   });
 });
+
 
 /**
  * PUT /api/staff/:id
  * Update basic fields (firstName, lastName, username, email)
  */
 router.put('/:id', ensureAuth, ensureAdmin, async (req, res) => {
-  const { firstName, lastName, username, email } = req.body;
-  const update = {};
-  if (firstName !== undefined) update.firstName = firstName;
-  if (lastName !== undefined) update.lastName = lastName;
-  if (username !== undefined) update.username = username;
-  if (email !== undefined) update.email = email;
+  try {
+    const { firstName, lastName, username, email } = req.body;
 
-  const updated = await Staff.findByIdAndUpdate(req.params.id, update, {
-    new: true,
-    runValidators: true,
-  }).select('-passwordHash');
+    const $set = {};
+    const $unset = {};
 
-  if (!updated) return res.status(404).json({ error: 'Staff not found' });
-  res.json(updated);
+    // username / email (only if provided)
+    if (username !== undefined) $set.username = String(username).trim();
+    if (email    !== undefined) $set.email    = String(email).trim();
+
+    // firstName: null or "" -> clear; else set
+    if (firstName === null || (typeof firstName === 'string' && firstName.trim() === '')) {
+      $unset.firstName = 1;
+    } else if (firstName !== undefined) {
+      $set.firstName = String(firstName).trim();
+    }
+
+    // lastName: null or "" -> clear; else set
+    if (lastName === null || (typeof lastName === 'string' && lastName.trim() === '')) {
+      $unset.lastName = 1;
+    } else if (lastName !== undefined) {
+      $set.lastName = String(lastName).trim();
+    }
+
+    // Build final update doc with only non-empty operators
+    const update = {};
+    if (Object.keys($set).length)   update.$set   = $set;
+    if (Object.keys($unset).length) update.$unset = $unset;
+
+    const updated = await Staff.findByIdAndUpdate(
+      req.params.id,
+      update,
+      {
+        new: true,
+        runValidators: true,
+        context: 'query',     // important for update validators
+        omitUndefined: true,  // don't turn missing keys into $set: undefined
+      }
+    ).select('-passwordHash');
+
+    if (!updated) return res.status(404).json({ error: 'Staff not found' });
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ message: err.message || 'Update failed' });
+  }
 });
 
 /**
