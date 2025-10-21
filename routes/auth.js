@@ -23,11 +23,25 @@ router.post('/staff/login', async (req, res) => {
   const { username, password } = req.body;
   const staff = await Staff.findOne({ username });
   if (!staff) return res.status(400).json({ error: 'Invalid credentials' });
+
   const ok = await bcrypt.compare(password, staff.passwordHash);
   if (!ok) return res.status(400).json({ error: 'Invalid credentials' });
-  req.session.user = { id: staff._id, role: 'staff', username, name: `${staff.firstName} ${staff.lastName}` };
+
+  // Build a clean "name" without the word 'undefined'
+  const name = [staff.firstName, staff.lastName].filter(Boolean).join(' ');
+
+  req.session.user = {
+    id: staff._id,
+    role: 'staff',
+    username,
+    name,
+    firstName: staff.firstName || '',
+    lastName:  staff.lastName  || ''
+  };
+
   res.json({ message: 'Logged in', user: req.session.user });
 });
+
 
 router.post('/logout', (req, res) => {
   req.session.destroy(() => res.json({ message: 'Logged out' }));
