@@ -1,3 +1,4 @@
+// server.js
 import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
@@ -5,7 +6,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import morgan from 'morgan';
-
 import { connectDB } from './config/db.js';
 import Admin from './models/Admin.js';
 import authRoutes from './routes/auth.js';
@@ -17,12 +17,14 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const isProd = process.env.NODE_ENV === 'production';
 
-// --- DB ----------------------------------------------------------------------
+// ---------------- Security/Headers (optional) ---------------
+app.disable('x-powered-by');
+
+// ---------------- DB ----------------------------------------
 await connectDB(process.env.MONGO_URI);
 
-// (optional) seed admin (dev safety)
+// (optional) seed admin
 (async () => {
   try {
     const existing = await Admin.findOne({ username: 'admin' });
@@ -32,81 +34,100 @@ await connectDB(process.env.MONGO_URI);
       console.log('👑 Seeded default admin: admin / 1234');
     }
   } catch (e) {
-    console.warn('Admin seed skipped:', e.message);
+    console.error('Admin seed error:', e?.message || e);
   }
 })();
 
-// --- Parsers -----------------------------------------------------------------
+// ------------- Parsers --------------------------------------
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// --- CORS (Safari-friendly) --------------------------------------------------
-// Set your production frontend here or via CLIENT_ORIGIN in .env
-const FRONTEND_ORIGIN = process.env.CLIENT_ORIGIN || 'https://appraise.hestonautomotive.com';
+// --------- Logs (dev only is fine, prod okay too) -----------
+app.use(morgan('dev'));
 
-const corsOptions = {
-  origin: [ 'http://localhost:3000', 'https://heston-app-henh.vercel.app', FRONTEND_ORIGIN ],
-  credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization','X-Requested-With'],
-  optionsSuccessStatus: 204,
-};
-app.use(cors(corsOptions));
-// Explicitly answer ALL preflights with 204 (iOS Safari can be strict)
-app.options('*', cors(corsOptions));
+// -------- Sessions / Cookies ⚠️ BEFORE routes) -------------
+// Required for secure cookies behind Render/NGINX/Cloudflare etc.
+app.set('trust proxy', 1);
+const isProd = process.env.NODE_ENV === 'production';
 
-// Optional: small helper to always include the credentials header
+// ------------- CORS (⚠️ BEFORE session) ---------------------
+// Keep localhost (dev), Vercel app, and your custom subdomain.
+// You can also supply CLIENT_ORIGIN via Render env; falsy values are filtered.
+const allowedOrigins = [
+  'http://localhost:3000',
+  'https://heston-app-henh.vercel.app',
+  'https://appraise.hestonautomotive.com',
+  process.env.CLIENT_ORIGIN,
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: 'https://appraise.hestonautomotive.com', // exact frontend domain
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 204,
+  })
+);
+
+// Ensure credentials header is always present on API responses (helps some clients)
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Vary', 'Origin');
   next();
 });
 
-// --- Logs --------------------------------------------------------------------
-app.use(morgan('dev'));
+// ------------- Session store & cookie ------------------------
+app.use(
+  session({
+    name: 'sid', // ⬅️ explicit cookie name (was default "connect.sid")
+    secret: process.env.SESSION_SECRET || 'devsecret',
+    resave: false,
+    saveUninitialized: false,
+    // proxy: true not required when app.set('trust proxy', 1) is set, but harmless:
+    proxy: true,
+    store: MongoStore.create({
+      mongoUrl: process.env.MONGO_URI,
+      dbName: 'heston_auth',
+      collectionName: 'sessions',
+      // ttl: 60 * 60 * 24, // optional: 1 day
+    }),
+    cookie: {
+      httpOnly: true,
+      // iPhone/Safari needs this when FE & BE are on different origins:
+      sameSite: 'none',
+      // Must be true in production for SameSite=None cookies:
+      secure: true,
+      // OPTIONAL: only set this if your BACKEND is also under *.hestonautomotive.com
+      // domain: '.hestonautomotive.com',
+      maxAge: 24 * 60 * 60 * 1000, // optional: 1 day
+    },
+  })
+);
 
-// --- Sessions (Safari / proxy safe) -----------------------------------------
-app.set('trust proxy', 1); // required for Secure cookies behind a proxy (Render/NGINX/etc)
-
-app.use(session({
-  // name: 'sid', // keep default 'connect.sid' unless you also update your logout code
-  secret: process.env.SESSION_SECRET || 'devsecret',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: process.env.MONGO_URI,
-    dbName: 'heston_auth',
-    collectionName: 'sessions',
-    ttl: 60 * 60 * 24 * 7, // 7 days
-  }),
-  cookie: {
-    httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax', // REQUIRED for cross-site on iOS Safari
-    secure:   isProd ? true    : false, // must be true when SameSite=None
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    // If API and FE are on different subdomains (e.g., api.heston... + appraise.heston...):
-    // uncomment the next line so the cookie is valid across subdomains:
-    // domain: '.hestonautomotive.com',
-  },
-}));
-
-// --- Routes ------------------------------------------------------------------
+// -------------- Routes --------------------------------------
 app.use('/api/auth', authRoutes);
 app.use('/api/staff', staffRoutes);
 app.use('/api/dvla', dvlaRoutes);
-app.use(appraisalsRouter); // appraisals router already prefixes /api/appraisals
+app.use(appraisalsRouter); // ⬅️ VERY IMPORTANT
+
+// Simple root route (added as per summary)
+app.get('/', (req, res) => res.status(200).send('OK'));
+
+// Optional test route for cookie testing
+app.get('/test-cookie', (req, res) => {
+  res.cookie('x_test', '1', { httpOnly: true, secure: true, sameSite: 'none' });
+  res.json({ ok: true });
+});
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// 404 debug helper
+// ------------- 404 Helper -----------------------------------
 app.use((req, res) => {
   console.warn('404', req.method, req.originalUrl);
   res.status(404).json({ error: 'Not found' });
 });
 
-// --- Server ------------------------------------------------------------------
+// -------------- Server --------------------------------------
 app.listen(PORT, () => {
   console.log(`🚀 Backend running on http://localhost:${PORT}`);
-  if (FRONTEND_ORIGIN) console.log(`CORS allowed origin: ${FRONTEND_ORIGIN}`);
 });
