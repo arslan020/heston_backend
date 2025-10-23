@@ -1,8 +1,9 @@
 {
   "name": "heston-auth-backend",
   "version": "1.0.0",
-    "engines": { "node": "20.x" },
-
+  "engines": {
+    "node": "20.x"
+  },
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -18,7 +19,8 @@
     "express-session": "^1.17.3",
     "mongodb": "^6.20.0",
     "mongoose": "^8.5.3",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "nodemailer": "^7.0.9"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
@@ -33,36 +34,41 @@ await connectDB(process.env.MONGO_URI);
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-
+// ✅ CORS config (array-based + explicit OPTIONS)
 const allowedOrigins = [
-  "http://localhost:3000",
-  "https://heston-app-henh.vercel.app",
-  "https://heston-backend.onrender.com"
+  'http://localhost:3000',
+  'https://heston-app-henh.vercel.app',
 ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+}));
 
+// Preflight for all routes
+app.options('*', cors({
+  origin: allowedOrigins,
+  credentials: true,
+}));
 
 // logs
 app.use(morgan('dev'));
 
 // sessions
+app.set('trust proxy', 1); // Render/Proxy ke liye
+const isProd = process.env.NODE_ENV === 'production';
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'devsecret',
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: 'lax', secure: false },
+  cookie: {
+    httpOnly: true,
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
+  },
   store: MongoStore.create({
     mongoUrl: process.env.MONGO_URI,
     dbName: 'heston_auth',
