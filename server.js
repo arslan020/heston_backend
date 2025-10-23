@@ -43,15 +43,19 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
 // ✅ CORS config (consolidated)
-const allowedOrigins = [
+const allowedOrigins = new Set([
   'http://localhost:3000',
-  'https://heston-app-henh.vercel.app',
   'https://appraise.hestonautomotive.com',
-  process.env.CLIENT_ORIGIN,
-].filter(Boolean);
+  process.env.CLIENT_ORIGIN, // keep env too
+].filter(Boolean));
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: (origin, cb) => {
+    // allow same-origin tools (e.g., curl/postman without Origin)
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.has(origin)) return cb(null, true);
+    return cb(new Error(`Not allowed by CORS: ${origin}`));
+  },
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
@@ -60,7 +64,11 @@ app.use(cors({
 
 // Preflight for all routes
 app.options('*', cors({
-  origin: allowedOrigins,
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.has(origin)) return cb(null, true);
+    return cb(new Error(`Not allowed by CORS: ${origin}`));
+  },
   credentials: true,
 }));
 
@@ -69,22 +77,27 @@ app.use(morgan('dev'));
 
 // sessions
 app.set('trust proxy', 1); // Render/Proxy ke liye
-const isProd = process.env.NODE_ENV === 'production';
 
 app.use(session({
+  name: 'sid', // ⬅️ explicit cookie name (was default "connect.sid")
   secret: process.env.SESSION_SECRET || 'devsecret',
   resave: false,
   saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax',
-    secure: isProd,
-  },
+  proxy: true,
   store: MongoStore.create({
     mongoUrl: process.env.MONGO_URI,
     dbName: 'heston_auth',
-    collectionName: 'sessions'
-  })
+    collectionName: 'sessions',
+    // ttl: 60 * 60 * 24, // optional: 1 day
+  }),
+  cookie: {
+    httpOnly: true,
+    sameSite: 'none',
+    secure: true,
+    // OPTIONAL: only set this if your BACKEND is also under *.hestonautomotive.com
+    // domain: '.hestonautomotive.com',
+    maxAge: 24 * 60 * 60 * 1000, // optional: 1 day
+  },
 }));
 
 // Ensure credentials header is always present on API responses (helps some clients)
@@ -92,34 +105,6 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   next();
 });
-
-// ------------- Session store & cookie ------------------------
-app.use(
-  session({
-    name: 'sid', // ⬅️ explicit cookie name (was default "connect.sid")
-    secret: process.env.SESSION_SECRET || 'devsecret',
-    resave: false,
-    saveUninitialized: false,
-    // proxy: true not required when app.set('trust proxy', 1) is set, but harmless:
-    proxy: true,
-    store: MongoStore.create({
-      mongoUrl: process.env.MONGO_URI,
-      dbName: 'heston_auth',
-      collectionName: 'sessions',
-      // ttl: 60 * 60 * 24, // optional: 1 day
-    }),
-    cookie: {
-      httpOnly: true,
-      // iPhone/Safari needs this when FE & BE are on different origins:
-      sameSite: 'none',
-      // Must be true in production for SameSite=None cookies:
-      secure: true,
-      // OPTIONAL: only set this if your BACKEND is also under *.hestonautomotive.com
-      // domain: '.hestonautomotive.com',
-      maxAge: 24 * 60 * 60 * 1000, // optional: 1 day
-    },
-  })
-);
 
 // -------------- Routes --------------------------------------
 app.use('/api/auth', authRoutes);
