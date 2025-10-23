@@ -42,17 +42,20 @@ await connectDB(process.env.MONGO_URI);
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// ✅ CORS config (array-based + explicit OPTIONS)
+// ✅ CORS config (consolidated)
 const allowedOrigins = [
   'http://localhost:3000',
   'https://heston-app-henh.vercel.app',
-];
+  'https://appraise.hestonautomotive.com',
+  process.env.CLIENT_ORIGIN,
+].filter(Boolean);
 
 app.use(cors({
   origin: allowedOrigins,
   credentials: true,
   methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization'],
+  optionsSuccessStatus: 204,
 }));
 
 // Preflight for all routes
@@ -83,26 +86,6 @@ app.use(session({
     collectionName: 'sessions'
   })
 }));
-
-// ------------- CORS (⚠️ BEFORE session) ---------------------
-// Keep localhost (dev), Vercel app, and your custom subdomain.
-// You can also supply CLIENT_ORIGIN via Render env; falsy values are filtered.
-const allowedOrigins = [
-  'http://localhost:3000',
-  'https://heston-app-henh.vercel.app',
-  'https://appraise.hestonautomotive.com',
-  process.env.CLIENT_ORIGIN,
-].filter(Boolean);
-
-app.use(
-  cors({
-    origin: 'https://appraise.hestonautomotive.com', // exact frontend domain
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 204,
-  })
-);
 
 // Ensure credentials header is always present on API responses (helps some clients)
 app.use((req, res, next) => {
