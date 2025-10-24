@@ -91,16 +91,18 @@ app.use(
       collectionName: 'sessions',
       // ttl: 60 * 60 * 24, // optional: 1 day
     }),
-    cookie: {
-      httpOnly: true,
-      // iPhone/Safari needs this when FE & BE are on different origins:
-      sameSite: 'none',
-      // Must be true in production for SameSite=None cookies:
-      secure: true,
-      // OPTIONAL: only set this if your BACKEND is also under *.hestonautomotive.com
-      // domain: '.hestonautomotive.com',
-      maxAge: 24 * 60 * 60 * 1000, // optional: 1 day
-    },
+    cookie: isProd ? {
+  httpOnly: true,
+  secure: true,                   // HTTPS on
+  sameSite: 'lax',                // ✅ ab same-site hai (api + appraise)
+  domain: '.hestonautomotive.com',// ✅ subdomains share cookie
+  maxAge: 24 * 60 * 60 * 1000,
+} : {
+  httpOnly: true,
+  secure: false,                  // local dev http
+  sameSite: 'lax',
+  maxAge: 24 * 60 * 60 * 1000,
+},
   })
 );
 
@@ -115,9 +117,16 @@ app.get('/', (req, res) => res.status(200).send('OK'));
 
 // Optional test route for cookie testing
 app.get('/test-cookie', (req, res) => {
-  res.cookie('x_test', '1', { httpOnly: true, secure: true, sameSite: 'none' });
+  res.cookie('x_test', '1', {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: 'lax',
+    domain: isProd ? '.hestonautomotive.com' : undefined,
+    maxAge: 24 * 60 * 60 * 1000,
+  });
   res.json({ ok: true });
 });
+
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
