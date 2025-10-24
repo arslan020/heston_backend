@@ -72,19 +72,22 @@ app.set('trust proxy', 1); // Render/Proxy ke liye
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(session({
+  name: 'sid',
   secret: process.env.SESSION_SECRET || 'devsecret',
   resave: false,
   saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',  // Updated: Always 'lax' for Safari compatibility (removed conditional 'none')
-    secure: isProd,   // Only true in production (HTTPS required)
-  },
+  proxy: true,
   store: MongoStore.create({
     mongoUrl: process.env.MONGO_URI,
     dbName: 'heston_auth',
     collectionName: 'sessions'
-  })
+  }),
+  cookie: {
+    httpOnly: true,
+    sameSite: isProd ? 'none' : 'lax',  // ✅ prod=different origins → 'none'
+    secure: isProd,                      // ✅ prod requires HTTPS
+    maxAge: 24 * 60 * 60 * 1000
+  }
 }));
 
 // Ensure credentials header is always present on API responses (helps some clients)
@@ -104,7 +107,12 @@ app.get('/', (req, res) => res.status(200).send('OK'));
 
 // Optional test route for cookie testing
 app.get('/test-cookie', (req, res) => {
-  res.cookie('x_test', '1', { httpOnly: true, secure: isProd, sameSite: 'lax' });  // Updated to match session
+  const isProd = process.env.NODE_ENV === 'production';
+  res.cookie('x_test', '1', {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax'
+  });
   res.json({ ok: true });
 });
 
