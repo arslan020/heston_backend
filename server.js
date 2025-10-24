@@ -72,22 +72,19 @@ app.set('trust proxy', 1); // Render/Proxy ke liye
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(session({
-  name: 'sid',
   secret: process.env.SESSION_SECRET || 'devsecret',
   resave: false,
   saveUninitialized: false,
-  proxy: true,
+  cookie: {
+    httpOnly: true,
+    sameSite: isProd ? 'none' : 'lax',
+    secure: isProd,
+  },
   store: MongoStore.create({
     mongoUrl: process.env.MONGO_URI,
     dbName: 'heston_auth',
     collectionName: 'sessions'
-  }),
-  cookie: {
-    httpOnly: true,
-    sameSite: isProd ? 'none' : 'lax',  // ✅ prod=different origins → 'none'
-    secure: isProd,                      // ✅ prod requires HTTPS
-    maxAge: 24 * 60 * 60 * 1000
-  }
+  })
 }));
 
 // Ensure credentials header is always present on API responses (helps some clients)
