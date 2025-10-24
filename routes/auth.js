@@ -54,41 +54,60 @@ import { sendMail } from '../config/mailer.js';
 
 // POST /api/auth/forgot-password
 // POST /api/auth/forgot-password
+// POST /api/auth/forgot-password
 router.post('/forgot-password', async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ message: 'Email is required' });
-
-  const staff = await Staff.findOne({ email });
-  if (!staff) {
-    return res.status(400).json({ message: 'Invalid email address' });
-  }
-
-  // 🔐 generate secure token + 1-hour expiry and SAVE to user
-  const token = crypto.randomBytes(32).toString('hex');
-  staff.resetPasswordToken = token;
-  staff.resetPasswordExpires = Date.now() + 3600000; // 1 hour
-  await staff.save();
-
-  // ✉️ build email
-  const resetUrl = `${process.env.CLIENT_ORIGIN}/reset-password/${token}`;
-  const subject = 'Password Reset - Heston Automotive';
-  const text = `You requested a password reset.
-Reset link (valid 1 hour): ${resetUrl}`;
-  const html = `
-    <p>You requested a password reset.</p>
-    <p><a href="${resetUrl}">Click here to reset your password</a></p>
-    <p>This link will expire in 1 hour.</p>
-  `;
-
   try {
-    await sendMail({ to: staff.email, subject, text, html });
-    return res.json({
+    const raw = (req.body?.email || "");
+    const email = raw.trim().toLowerCase();
+
+    // Invalid format par bhi generic success return karo (security + better UX)
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      return res.status(200).json({
+        message:
+          'If that email exists, a reset link has been sent. Please check your inbox and also your junk or spam folder.'
+      });
+    }
+
+    // DB me normalized email se lookup
+    const staff = await Staff.findOne({ email });
+
+    if (staff) {
+      // Token generate + save
+      const token = crypto.randomBytes(32).toString('hex');
+      staff.resetPasswordToken = token;
+      staff.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+      await staff.save();
+
+      // Reset link
+      const resetUrl = `${process.env.CLIENT_ORIGIN}/reset-password/${token}`;
+      const subject = 'Password Reset - Heston Automotive';
+      const html = `
+        <p>You requested a password reset.</p>
+        <p><a href="${resetUrl}">Click here to reset your password</a></p>
+        <p>This link will expire in 1 hour.</p>
+      `;
+
+      // Email bhejo (fail ho to bhi client ko 200 hi dena hai)
+      try {
+        await sendMail({ to: staff.email, subject, html });
+        console.log('📧 Reset mail sent to', staff.email);
+      } catch (e) {
+        console.error('📧 Email send failed:', e.message);
+      }
+    }
+
+    // HAMESHA generic success (user enumeration avoid)
+    return res.status(200).json({
       message:
         'If that email exists, a reset link has been sent. Please check your inbox and also your junk or spam folder.'
     });
   } catch (err) {
-    console.error('Email send failed:', err);
-    return res.status(500).json({ message: 'Failed to send reset email' });
+    console.error('forgot-password error:', err);
+    // Error par bhi generic 200
+    return res.status(200).json({
+      message:
+        'If that email exists, a reset link has been sent. Please check your inbox and also your junk or spam folder.'
+    });
   }
 });
 
