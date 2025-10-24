@@ -76,10 +76,12 @@ app.options('*', cors({
 app.use(morgan('dev'));
 
 // sessions
-app.set('trust proxy', 1); // Render/Proxy ke liye
+// ✅ Trust proxy required for Render & Safari secure cookies
+app.set('trust proxy', 1);
 
+// ✅ Express-session config (Safari-safe)
 app.use(session({
-  name: 'sid', // ⬅️ explicit cookie name (was default "connect.sid")
+  name: 'sid',
   secret: process.env.SESSION_SECRET || 'devsecret',
   resave: false,
   saveUninitialized: false,
@@ -88,17 +90,15 @@ app.use(session({
     mongoUrl: process.env.MONGO_URI,
     dbName: 'heston_auth',
     collectionName: 'sessions',
-    // ttl: 60 * 60 * 24, // optional: 1 day
   }),
   cookie: {
     httpOnly: true,
-    sameSite: 'none',
-    secure: true,
-    // OPTIONAL: only set this if your BACKEND is also under *.hestonautomotive.com
-    // domain: '.hestonautomotive.com',
-    maxAge: 24 * 60 * 60 * 1000, // optional: 1 day
+    secure: true,           // ✅ must be true for HTTPS
+    sameSite: 'none',       // ✅ allow cross-site cookies (Safari fix)
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
   },
 }));
+
 
 // Ensure credentials header is always present on API responses (helps some clients)
 app.use((req, res, next) => {
