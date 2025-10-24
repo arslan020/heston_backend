@@ -1,17 +1,16 @@
 {
-  "name": "heston-auth-backend",
+  "name": "heston-backend",
   "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
   "engines": {
     "node": "20.x"
   },
-  "type": "module",
-  "main": "server.js",
-  "scripts": {
-    "dev": "nodemon server.js",
-    "start": "node server.js"
-  },
   "dependencies": {
-    "resend": "^3.2.0"
     "bcrypt": "^5.1.1",
     "connect-mongo": "^5.1.0",
     "cors": "^2.8.5",
@@ -21,9 +20,10 @@
     "mongodb": "^6.20.0",
     "mongoose": "^8.5.3",
     "morgan": "^1.10.1",
-    "nodemailer": "^7.0.9"
+    "nodemailer": "^7.0.9",
+    "resend": "^3.2.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4"
+    "nodemon": "^3.1.7"
   }
 }
